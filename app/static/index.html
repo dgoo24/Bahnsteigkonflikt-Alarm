@@ -1,0 +1,519 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bahnsteigkonflikt-Alarm · Deutsche Bahn · Ereignisgesteuert</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55); }
+      70% { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    .alert-pulse { animation: pulse-ring 2s infinite; }
+    @keyframes flash-in {
+      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .flash-in { animation: flash-in 0.35s ease-out; }
+    .resolved { opacity: 0.45; filter: grayscale(0.6); }
+    .nivel-btn { background: #1e293b; color: #cbd5e1; }
+    .nivel-btn:hover { background: #334155; }
+    .nivel-btn.active { background: #0284c7; color: #fff; }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+    <div class="mx-auto max-w-6xl px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-10 w-10 rounded-xl bg-red-600 flex items-center justify-center text-xl font-black">DB</div>
+        <div>
+          <h1 class="text-lg font-bold leading-tight">Bahnsteigkonflikt-Alarm</h1>
+          <p class="text-xs text-slate-400">Ereignisgesteuert · Redis Pub/Sub · SSE-Push · Gleitende 15-Minuten-Fenster</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-sky-950 text-sky-300 border border-sky-700">
+          Echtzeitdaten · DB API
+        </span>
+        <span id="status-badge" class="px-3 py-1 rounded-full text-xs font-semibold bg-slate-700 text-slate-300">
+          Verbinden…
+        </span>
+        <span class="text-xs text-slate-400">Stream: <span id="last-update">—</span></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-6xl px-6 py-8">
+    <section class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+      <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Aktive Konflikte</p>
+        <p id="total-conflictos" class="text-3xl font-black mt-1">0</p>
+        <p id="metric-niveles" class="text-xs mt-1 text-slate-400">—</p>
+      </div>
+      <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Gesamtstatus</p>
+        <p id="estado-global" class="text-lg font-bold mt-2 text-emerald-400">Alles OK</p>
+      </div>
+      <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Verarbeitete Ereignisse</p>
+        <p id="metric-events" class="text-3xl font-black mt-1">0</p>
+      </div>
+      <div class="rounded-2xl bg-slate-900 border border-slate-800 p-5">
+        <p class="text-xs uppercase tracking-wide text-slate-400">Angewandte Verspätungen</p>
+        <p id="metric-delays" class="text-3xl font-black mt-1 text-amber-400">0</p>
+      </div>
+    </section>
+
+    <section class="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-8 text-xs">
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">Fenster</span>
+        <p id="metric-window" class="font-semibold text-slate-300">—</p>
+      </div>
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">Verspätet / ungeordnet</span>
+        <p id="metric-late" class="font-semibold text-slate-300">—</p>
+      </div>
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">Belegungen im Fenster</span>
+        <p id="metric-occ" class="font-semibold text-slate-300">—</p>
+      </div>
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">Empfohlene Gleiswechsel</span>
+        <p id="metric-gw" class="font-semibold text-slate-300 text-amber-400">—</p>
+      </div>
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">DB-API Anfragen/Min</span>
+        <p id="metric-req" class="font-semibold text-slate-300">—</p>
+      </div>
+      <div class="rounded-xl bg-slate-900/60 border border-slate-800 p-3">
+        <span class="text-slate-500">Bahnhöfe (StaDa)</span>
+        <p id="metric-stations" class="font-semibold text-slate-300">—</p>
+      </div>
+    </section>
+
+    <section class="mb-6 rounded-2xl bg-slate-900 border border-slate-800 p-4 flex flex-wrap items-center gap-3">
+      <span class="text-xs uppercase tracking-wide text-slate-400 font-semibold">Filtern</span>
+      <select id="filtro-region" aria-label="Nach Region filtern"
+        class="rounded-lg bg-slate-800 border border-slate-700 text-sm px-3 py-2 text-slate-200 min-w-[190px] focus:border-sky-600 focus:outline-none">
+        <option value="">Alle Regionen</option>
+      </select>
+      <select id="filtro-ciudad" aria-label="Nach Stadt filtern"
+        class="rounded-lg bg-slate-800 border border-slate-700 text-sm px-3 py-2 text-slate-200 min-w-[190px] focus:border-sky-600 focus:outline-none">
+        <option value="">Alle Städte</option>
+      </select>
+      <div id="filtro-nivel" role="group" aria-label="Nach Stufe filtern"
+        class="flex overflow-hidden rounded-lg border border-slate-700 text-xs font-semibold">
+        <button type="button" data-nivel="" class="nivel-btn px-3 py-2">Alle</button>
+        <button type="button" data-nivel="conflicto" class="nivel-btn px-3 py-2 border-l border-slate-700">Konflikte</button>
+        <button type="button" data-nivel="riesgo" class="nivel-btn px-3 py-2 border-l border-slate-700">Risiken</button>
+      </div>
+      <select id="filtro-causa" aria-label="Nach Ursache filtern"
+        class="rounded-lg bg-slate-800 border border-slate-700 text-sm px-3 py-2 text-slate-200 min-w-[210px] focus:border-sky-600 focus:outline-none">
+        <option value="">Alle Ursachen</option>
+        <option value="efecto_dominó">Dominoeffekt (Verspätung)</option>
+        <option value="retraso_contribuyente">Beitragende Verspätung</option>
+        <option value="solapamiento_programado">Geplante Überlappung</option>
+      </select>
+      <button id="filtro-reset"
+        class="rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-sm px-3 py-2 text-slate-300 transition-colors">
+        Zurücksetzen
+      </button>
+      <span id="filtro-info" class="text-xs text-slate-400 ml-auto">—</span>
+    </section>
+
+    <section id="alertas" class="grid grid-cols-1 md:grid-cols-2 gap-5"></section>
+
+    <section id="empty-state" class="hidden">
+      <div class="rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-14 text-center">
+        <div class="text-6xl mb-4">&#9989;</div>
+        <h2 class="text-2xl font-bold text-emerald-300">Alles OK</h2>
+        <p class="text-emerald-200/80 mt-2">Keine Bahnsteigkonflikte im gleitenden Fenster (letzte 15 Min.).</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mx-auto max-w-6xl px-6 py-8 text-center text-xs text-slate-500">
+    MVP Big Data · Echtzeitdaten: DB Timetables + StaDa API (CC BY 4.0) ·
+    Ereignisgesteuerte Ingestion (Redis Pub/Sub) → Gleitende Fenster im Arbeitsspeicher →
+    SSE-Push · Konflikt = überlappende Belegung (rot) · Risiko = Puffer &lt; 3 Min. (gelb) ·
+    Horizont 30 Min. · Dominoeffekt (Verspätung) · Gleiswechsel · Auditierung in PostgreSQL
+  </footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    // uid -> Konflikt (lokaler Stream-Zustand)
+    const conflictos = new Map();
+    // bereits gezeichnete uids (nur wirklich neue Warnungen animieren)
+    const vistas = new Set();
+
+    function nombreEstacion(c) {
+      return c.nombre_estacion || c.estacion_id;
+    }
+    function formatHora(iso) {
+      try { return new Date(iso).toLocaleTimeString("de-DE"); }
+      catch (e) { return iso; }
+    }
+
+    const CAUSA_LABEL = {
+      "efecto_dominó": "Dominoeffekt (Verspätung)",
+      "retraso_contribuyente": "Beitragende Verspätung",
+      "solapamiento_programado": "Geplante Überlappung",
+    };
+
+    // Número de tren real (Zugnummer, p. ej. "ICE 599"), NO la línea/ruta.
+    // Si la API no trae el número, se limpia el identificador interno.
+    function trenLabel(c, n) {
+      const numero = c["tren_" + n + "_numero"];
+      const categoria = c["tren_" + n + "_categoria"] || "";
+      if (numero) return (categoria + " " + numero).trim();
+      const id = c["tren_" + n + "_id"] || "";
+      const parte = id.includes(":") ? id.split(":")[1] : id;
+      return parte.replace(/-\d{3,4}$/, "") || id || "—";
+    }
+
+    function alertaCard(c, esNueva) {
+      const riesgo = c.nivel === "riesgo";
+      const resuelto = c.estado === "resuelto";
+      const t = riesgo
+        ? { border: "border-amber-500/60", from: "from-amber-950",
+            text: "text-amber-300", chip: "bg-amber-600",
+            soft: "border-amber-500/20" }
+        : { border: "border-red-500/60", from: "from-red-950",
+            text: "text-red-300", chip: "bg-red-600",
+            soft: "border-red-500/20" };
+      const nivelLabel = riesgo ? "Risiko · knapper Puffer" : "Konflikt · überlappende Belegung";
+      const solape = Number(c.solape_min ?? 0);
+      const medida = solape > 0
+        ? `Überlappung${riesgo ? " (gesch.)" : ""}: <strong class="${t.text}">${solape.toFixed(2)} Min.</strong>`
+        : `Puffer: <strong class="${t.text}">${Number(c.minutos_diferencia).toFixed(2)} Min.</strong>`;
+      const gw = c.sugerencia_gleiswechsel
+        ? `<div class="mt-3 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 flex items-center justify-between">
+             <span class="text-xs font-semibold text-amber-300">↻ Gleiswechsel empfohlen &rarr; Gleis ${c.gleis_alternativo ?? "?"}</span>
+             <span class="text-[10px] text-amber-400/80">Bahnsteig-Neuvergabe</span>
+           </div>`
+        : "";
+      const retraso = c.retraso_min > 0
+        ? `<span class="rounded-lg bg-amber-600/20 border border-amber-600/40 px-2 py-0.5 text-[11px] font-bold text-amber-300">+${Number(c.retraso_min).toFixed(0)} Min. Verspätung</span>`
+        : "";
+
+      return `
+        <article class="${resuelto ? "resolved" : (riesgo ? "" : "alert-pulse")}${esNueva ? " flash-in" : ""} rounded-2xl border-2 ${t.border} bg-gradient-to-br ${t.from} to-slate-900 p-5 shadow-lg">
+          <div class="flex items-start justify-between gap-3">
+            <div>
+              <p class="text-xs font-semibold ${t.text} uppercase tracking-wide">
+                ${resuelto ? "Gelöst · " : ""}${nivelLabel}
+              </p>
+              <p class="text-[11px] text-slate-400 mt-0.5">${CAUSA_LABEL[c.causa] || c.causa}</p>
+              <h3 class="text-xl font-bold mt-1">${nombreEstacion(c)}</h3>
+              ${(c.ciudad || c.region)
+                ? `<p class="text-[11px] text-slate-500 mt-0.5">${[c.ciudad, c.region].filter(Boolean).join(" · ")}</p>`
+                : ""}
+            </div>
+            <span class="shrink-0 rounded-xl ${t.chip} text-white font-black px-3 py-2 text-lg">
+              Gleis ${c.gleis}
+            </span>
+          </div>
+
+          <div class="mt-4 grid grid-cols-2 gap-3">
+            <div class="rounded-xl bg-slate-900/70 border ${t.soft} p-3">
+              <p class="text-[10px] uppercase text-slate-400">Zug-Nr. 1</p>
+              <p class="font-mono font-bold text-lg break-all">${trenLabel(c, 1)}</p>
+            </div>
+            <div class="rounded-xl bg-slate-900/70 border ${t.soft} p-3">
+              <p class="text-[10px] uppercase text-slate-400">Zug-Nr. 2</p>
+              <p class="font-mono font-bold text-lg break-all">${trenLabel(c, 2)}</p>
+            </div>
+          </div>
+
+          ${gw}
+
+          <div class="mt-4 flex items-center justify-between text-sm flex-wrap gap-2">
+            <span class="text-slate-300">
+              ${medida}
+              ${retraso}
+            </span>
+            <span class="text-slate-400 text-xs">${formatHora(c.primera_deteccion || c.actualizado_en)}</span>
+          </div>
+        </article>`;
+    }
+
+    let lastSig = "";
+    let filtroRegion = "";
+    let filtroCiudad = "";
+    let filtroNivel = "";
+    let filtroCausa = "";
+    let opcionesSig = "";
+    let catalogo = { regiones: [], ciudades: {} };   // vollständiger StaDa-Katalog
+
+    function etiqueta(nombre, alertas) {
+      return alertas > 0 ? `${nombre} · ${alertas}` : `${nombre} · keine Warnungen`;
+    }
+
+    let ultimaPoblacion = 0;
+    function actualizarBotonesNivel() {
+      document.querySelectorAll("#filtro-nivel .nivel-btn").forEach((b) => {
+        b.classList.toggle("active", (b.dataset.nivel || "") === filtroNivel);
+      });
+    }
+
+    function poblarFiltros() {
+      // Aktive Warnungen je Region und Stadt (Live-Stream)
+      const porRegion = new Map();
+      const porCiudad = new Map();
+      for (const c of conflictos.values()) {
+        if (c.estado === "resuelto") continue;
+        if (c.region) porRegion.set(c.region, (porRegion.get(c.region) || 0) + 1);
+        if (c.ciudad) porCiudad.set(c.ciudad, (porCiudad.get(c.ciudad) || 0) + 1);
+      }
+
+      // Regionen: vollständiger StaDa-Katalog + alle mit Warnungen
+      const regiones = new Set(catalogo.regiones || []);
+      porRegion.forEach((_, r) => regiones.add(r));
+      const listaRegiones = [...regiones].sort((a, b) => a.localeCompare(b, "de"));
+
+      // Städte: bei gewählter Region ALLE der Region, sonst alle in
+      // Deutschland (so erscheinen sie auch ohne erkannte Warnungen).
+      const cities = catalogo.ciudades || {};
+      const setCiudades = new Set();
+      if (filtroRegion) {
+        (cities[filtroRegion] || []).forEach((ci) => setCiudades.add(ci));
+      } else {
+        Object.values(cities).forEach((arr) => arr.forEach((ci) => setCiudades.add(ci)));
+      }
+      for (const c of conflictos.values()) {
+        if (c.estado === "resuelto" || !c.ciudad) continue;
+        if (!filtroRegion || c.region === filtroRegion) setCiudades.add(c.ciudad);
+      }
+      const listaCiudades = [...setCiudades].sort((a, b) => a.localeCompare(b, "de"));
+
+      if (filtroRegion && !listaRegiones.includes(filtroRegion)) filtroRegion = "";
+      if (filtroCiudad && !listaCiudades.includes(filtroCiudad)) filtroCiudad = "";
+
+      const osig = [
+        listaRegiones.length, listaCiudades.length,
+        listaRegiones.map((r) => `${r}:${porRegion.get(r) || 0}`).join("|"),
+        listaCiudades.map((c) => `${c}:${porCiudad.get(c) || 0}`).join("|"),
+        filtroRegion, filtroCiudad,
+      ].join("\u00a7");
+      if (osig === opcionesSig) return;
+      // Große Listen (3402 Städte): höchstens alle 2,5 s neu aufbauen.
+      if (Date.now() - ultimaPoblacion < 2500) return;
+      opcionesSig = osig;
+      ultimaPoblacion = Date.now();
+
+      $("filtro-region").innerHTML =
+        `<option value="">Alle Regionen</option>` +
+        listaRegiones.map((r) => `<option value="${r}"${r === filtroRegion ? " selected" : ""}>${etiqueta(r, porRegion.get(r) || 0)}</option>`).join("");
+      $("filtro-ciudad").innerHTML =
+        `<option value="">Alle Städte</option>` +
+        listaCiudades.map((c) => `<option value="${c}"${c === filtroCiudad ? " selected" : ""}>${etiqueta(c, porCiudad.get(c) || 0)}</option>`).join("");
+    }
+
+    function render() {
+      const sig = [filtroRegion, filtroCiudad, filtroNivel, filtroCausa, ...[...conflictos.values()]
+        .map((c) => `${c.uid}:${c.nivel}:${c.estado}:${c.minutos_diferencia}:${c.detecciones || 0}`)
+        .sort()].join("|");
+      if (sig === lastSig) return;   // unverändert: nicht neu rendern
+      lastSig = sig;
+      poblarFiltros();
+      actualizarBotonesNivel();
+      const todos = [...conflictos.values()].sort((a, b) => {
+        const ea = a.estado === "resuelto" ? 1 : 0;
+        const eb = b.estado === "resuelto" ? 1 : 0;
+        if (ea !== eb) return ea - eb;                      // aktive zuerst
+        const na = a.nivel === "riesgo" ? 1 : 0;
+        const nb = b.nivel === "riesgo" ? 1 : 0;
+        if (na !== nb) return na - nb;                      // Konflikt vor Risiko
+        return (b.primera_deteccion || "").localeCompare(a.primera_deteccion || "");
+      });
+      const lista = todos.filter(
+        (c) => (!filtroRegion || c.region === filtroRegion)
+            && (!filtroCiudad || c.ciudad === filtroCiudad)
+            && (!filtroNivel || (c.nivel || "conflicto") === filtroNivel)
+            && (!filtroCausa || c.causa === filtroCausa)
+      );
+      const activos = lista.filter((c) => c.estado !== "resuelto");
+      const activosTodos = todos.filter((c) => c.estado !== "resuelto").length;
+      const nConflicto = activos.filter((c) => c.nivel !== "riesgo").length;
+      const nRiesgo = activos.length - nConflicto;
+
+      $("total-conflictos").textContent = nConflicto;
+      $("metric-niveles").textContent = `${nConflicto} Konflikte · ${nRiesgo} Risiken`;
+      const hayFiltro = filtroRegion || filtroCiudad || filtroNivel || filtroCausa;
+      $("filtro-info").textContent = hayFiltro
+        ? `Zeige ${activos.length} von ${activosTodos} aktiven Warnungen`
+        : `${activosTodos} aktive Warnungen`;
+      $("last-update").textContent = new Date().toLocaleTimeString("de-DE");
+
+      const badge = $("status-badge");
+      const estado = $("estado-global");
+
+      if (activos.length > 0) {
+        badge.textContent = nConflicto > 0
+          ? `${nConflicto} Konflikte · SSE`
+          : `${nRiesgo} Risiken · SSE`;
+        badge.className = `px-3 py-1 rounded-full text-xs font-semibold text-white ${nConflicto > 0 ? "bg-red-600" : "bg-amber-600"}`;
+        estado.textContent = nConflicto > 0 ? "Konflikt erkannt" : "Überlappungsrisiko";
+        estado.className = `text-lg font-bold mt-2 ${nConflicto > 0 ? "text-red-400" : "text-amber-400"}`;
+        $("empty-state").classList.add("hidden");
+        const cont = $("alertas");
+        const MAX_CARDS = 24;
+        const visibles = lista.slice(0, MAX_CARDS);
+        const resto = lista.length - visibles.length;
+        const uidsVisibles = new Set(visibles.map((c) => c.uid));
+        for (const uid of [...vistas]) {
+          if (!uidsVisibles.has(uid)) vistas.delete(uid);   // nicht mehr sichtbar
+        }
+        cont.innerHTML =
+          visibles.map((c) => alertaCard(c, !vistas.has(c.uid))).join("") +
+          (resto > 0
+            ? `<div class="rounded-xl border border-slate-700 bg-slate-900/50 p-4 text-center text-sm text-slate-400">+${resto} weitere Warnungen (neueste ${MAX_CARDS} angezeigt)</div>`
+            : "");
+        for (const uid of uidsVisibles) vistas.add(uid);
+        cont.classList.remove("hidden");
+      } else {
+        badge.textContent = "Keine Konflikte · SSE";
+        badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-emerald-600 text-white";
+        estado.textContent = "Alles OK";
+        estado.className = "text-lg font-bold mt-2 text-emerald-400";
+        $("alertas").classList.add("hidden");
+        $("alertas").innerHTML = "";
+        $("empty-state").classList.remove("hidden");
+      }
+
+      const gw = lista.filter((c) => c.sugerencia_gleiswechsel && c.estado !== "resuelto").length;
+      $("metric-gw").textContent = gw;
+    }
+
+    let renderScheduled = false;
+    let lastRenderAt = 0;
+    function scheduleRender() {
+      if (renderScheduled) return;
+      renderScheduled = true;
+      const espera = Math.max(0, 700 - (Date.now() - lastRenderAt));  // gedrosselt
+      setTimeout(() => {
+        renderScheduled = false;
+        lastRenderAt = Date.now();
+        render();
+      }, espera);
+    }
+
+    function upsert(conflicto) {
+      if (!conflicto || !conflicto.uid) return;
+      conflictos.set(conflicto.uid, conflicto);
+      scheduleRender();
+    }
+
+    function removeConflict(uid) {
+      const c = conflictos.get(uid);
+      if (c) { c.estado = "resuelto"; scheduleRender(); }
+    }
+
+    $("filtro-region").addEventListener("change", (e) => {
+      filtroRegion = e.target.value;
+      filtroCiudad = "";              // Städte hängen von der Region ab
+      ultimaPoblacion = 0;            // Städte sofort neu aufbauen
+      render();
+    });
+    $("filtro-ciudad").addEventListener("change", (e) => {
+      filtroCiudad = e.target.value;
+      render();
+    });
+    $("filtro-causa").addEventListener("change", (e) => {
+      filtroCausa = e.target.value;
+      render();
+    });
+    document.querySelectorAll("#filtro-nivel .nivel-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        filtroNivel = b.dataset.nivel || "";
+        render();
+      });
+    });
+    $("filtro-reset").addEventListener("click", () => {
+      filtroRegion = filtroCiudad = filtroNivel = filtroCausa = "";
+      $("filtro-region").value = "";
+      $("filtro-ciudad").value = "";
+      $("filtro-causa").value = "";
+      ultimaPoblacion = 0;
+      render();
+    });
+
+    async function cargarCatalogo() {
+      try {
+        const resp = await fetch("/api/estaciones", { cache: "no-store" });
+        if (!resp.ok) return;
+        catalogo = await resp.json();
+        opcionesSig = "";             // Filter neu aufbauen erzwingen
+        ultimaPoblacion = 0;
+        lastSig = "";
+        render();
+      } catch (e) { /* Filter bleiben mit den Regionen aus den Warnungen */ }
+    }
+
+    async function fetchMetrics() {
+      try {
+        const resp = await fetch("/api/metrics", { cache: "no-store" });
+        if (!resp.ok) return;
+        const m = await resp.json();
+        const d = m.detector;
+        const p = m.producer || {};
+        $("metric-events").textContent = d.events_in.toLocaleString("de-DE");
+        $("metric-delays").textContent = d.delays_applied.toLocaleString("de-DE");
+        $("metric-window").textContent =
+          `${Math.round(d.window_seg / 60)} Min. · Horizont ${Math.round((d.horizonte_seg || 0) / 60)} Min.`;
+        $("metric-late").textContent = `${d.late_events} / ${d.out_of_order}`;
+        $("metric-occ").textContent =
+          `${d.window_occupations} (${d.window_groups} Gleis)`;
+        $("metric-req").textContent = p.credenciales
+          ? `${p.req_ultimo_min ?? "—"} / ${Math.round(p.rate_limit_min || 0)}`
+          : "ohne Zugangsdaten";
+        $("metric-stations").textContent = p.catalogo_cargado
+          ? `${(p.estaciones || 0).toLocaleString("de-DE")} (${p.estaciones_activas || 0} aktiv)`
+          : "lädt…";
+        $("metric-niveles").textContent =
+          `${d.conflicts_activos_conflicto ?? 0} Konflikte · ${d.conflicts_activos_riesgo ?? 0} Risiken`;
+      } catch (e) { /* ohne Metriken bleibt die UI funktionsfähig */ }
+    }
+
+    // ── SSE: der Server schiebt die Änderungen (kein Konflikt-Polling) ──
+    function connectSSE() {
+      const es = new EventSource("/api/stream/conflictos");
+      const badge = $("status-badge");
+
+      es.onopen = () => {
+        badge.textContent = "Live (SSE)";
+        badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-sky-600 text-white";
+      };
+
+      es.addEventListener("snapshot", (e) => {
+        const data = JSON.parse(e.data);
+        conflictos.clear();
+        (data.conflictos || []).forEach((c) => conflictos.set(c.uid, c));
+        scheduleRender();
+      });
+
+      es.onmessage = (e) => {
+        try {
+          const { action, conflicto } = JSON.parse(e.data);
+          if (action === "resuelto") removeConflict(conflicto.uid);
+          else upsert(conflicto);
+        } catch (err) { console.error(err); }
+      };
+
+      es.onerror = () => {
+        badge.textContent = "Neuverbindung…";
+        badge.className = "px-3 py-1 rounded-full text-xs font-semibold bg-amber-600 text-white";
+        // EventSource verbindet sich automatisch neu.
+      };
+    }
+
+    cargarCatalogo();
+    connectSSE();
+    fetchMetrics();
+    setInterval(fetchMetrics, 5000);
+  </script>
+</body>
+</html>

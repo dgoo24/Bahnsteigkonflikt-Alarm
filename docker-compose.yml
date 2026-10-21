@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: db_andenes
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: db_andenes
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d db_andenes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_bus
+    command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: app_andenes
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: db_andenes
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Bus de eventos (Redis Pub/Sub)
+      REDIS_URL: redis://redis:6379/0
+      # DB API Marketplace (developers.deutschebahn.com) — desde .env
+      DB_CLIENT_ID: ${DB_CLIENT_ID:-}
+      DB_API_KEY: ${DB_API_KEY:-}
+      DB_RATE_PER_MIN: ${DB_RATE_PER_MIN:-55}
+      # Rotación de jobs (rate limit 60 req/min en plan Free)
+      FCHG_TTL_ACTIVA: ${FCHG_TTL_ACTIVA:-60}
+      FCHG_TTL_FONDO: ${FCHG_TTL_FONDO:-900}
+      PLAN_TTL_SEG: ${PLAN_TTL_SEG:-3600}
+      CATALOG_TTL_SEG: ${CATALOG_TTL_SEG:-86400}
+      STADA_MAX_ESTACIONES: ${STADA_MAX_ESTACIONES:-0}
+      # Stream detector: ventanas deslizantes
+      VENTANA_SEG: "900"
+      LATE_TOLERANCE_SEG: "120"
+      UMBRAL_SEGUNDOS: "180"
+      GLEISWECHEL_UMBRAL_SEG: "45"
+      SWEEP_INTERVAL: "5"
+      OCUPACION_TTL_SEG: "600"
+      EVENTO_TTL_SEG: "7200"
+      # Horizonte de predicción de alertas (30 min)
+      HORIZONTE_SEG: ${HORIZONTE_SEG:-1800}
+      # SSE
+      SSE_HEARTBEAT_SEG: "15"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app
+      - ./sql:/app/sql
+
+volumes:
+  pgdata:
