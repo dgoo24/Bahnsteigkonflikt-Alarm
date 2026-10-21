@@ -14,9 +14,11 @@ Vive en un **módulo normal** (y no en el script principal) a propósito:
 from __future__ import annotations
 
 import asyncio
+import sys
 import threading
 import time
 import traceback
+import types
 
 
 class Motor:
@@ -34,12 +36,15 @@ class Motor:
         self.productor = None
         self.detector = None
         self._hilo: threading.Thread | None = None
+        self._loop = None
+        self._detenido = False
         self._arrancar()
 
     # ── Ciclo de vida ───────────────────────────────────────────────────
     def _arrancar(self) -> None:
         self.error = ""
         self.error_detalle = ""
+        self._detenido = False
         self._hilo = threading.Thread(
             target=self._bucle, name="motor-eventos", daemon=True
         )
@@ -54,8 +59,14 @@ class Motor:
             self._arrancar()
 
     def parar(self) -> None:
-        """Detiene el motor (solo para pruebas)."""
-        self._hilo = None
+        """Detiene el motor (para no duplicar peticiones a la DB API)."""
+        self._detenido = True
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:  # pragma: no cover
+                pass
 
     # ── Hilo del pipeline ───────────────────────────────────────────────
     def _bucle(self) -> None:
@@ -64,6 +75,8 @@ class Motor:
 
             asyncio.run(self._main())
         except Exception as exc:  # pragma: no cover
+            if self._detenido:
+                return
             self.error = f"{type(exc).__name__}: {exc}"
             self.error_detalle = traceback.format_exc()
 
@@ -72,6 +85,8 @@ class Motor:
 
         from app.detector import StreamDetector
         from app.ingest import EventProducer
+
+        self._loop = asyncio.get_running_loop()
 
         productor = EventProducer()
         detector = StreamDetector()
@@ -93,12 +108,23 @@ class Motor:
         )
 
 
-_MOTOR: Motor | None = None
+# El singleton vive en sys.modules con una clave propia: así sobrevive a
+# recargas del script (el watcher puede purgar los módulos del proyecto, pero
+# no las entradas añadidas a mano a sys.modules) y sigue siendo UN motor por
+# proceso, sin duplicar peticiones a la DB API.
+_CLAVE = "_bahnsteigkonflikt_motor"
 
 
 def obtener_motor() -> Motor:
     """Devuelve el motor del proceso (lo crea la primera vez)."""
-    global _MOTOR
-    if _MOTOR is None:
-        _MOTOR = Motor()
-    return _MOTOR
+    modulo = sys.modules.get(_CLAVE)
+    if not isinstance(modulo, types.ModuleType):
+        modulo = types.ModuleType(_CLAVE)
+        sys.modules[_CLAVE] = modulo
+    motor = getattr(modulo, "motor", None)
+    if motor is None or not motor.vivo():
+        if motor is not None:
+            motor.parar()
+        motor = Motor()
+        modulo.motor = motor
+    return motor
