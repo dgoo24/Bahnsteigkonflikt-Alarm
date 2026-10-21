@@ -29,9 +29,12 @@ if _RAIZ not in sys.path:
 os.environ.setdefault("BUS_LOCAL", "1")
 os.environ.setdefault("AUDIT_ENABLED", "0")
 
-from datetime import datetime
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 import streamlit as st
+
+DB_TZ = ZoneInfo("Europe/Berlin")
 
 # Credenciales de la DB API: Streamlit Secrets → variables de entorno.
 def _secretos_a_entorno() -> None:
@@ -81,10 +84,14 @@ def _esc(texto) -> str:
 
 
 def _hora(iso) -> str:
+    """Hora local de Europa/Berlin (el pipeline guarda los instantes en UTC)."""
     try:
-        return datetime.fromisoformat(str(iso)).strftime("%H:%M:%S")
+        dt = datetime.fromisoformat(str(iso))
     except Exception:
         return "—"
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(DB_TZ).strftime("%H:%M:%S")
 
 
 def _etiqueta_tren(conflicto: dict, n: int) -> str:
