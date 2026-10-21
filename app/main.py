@@ -15,6 +15,14 @@ Docker (``app/api.py`` + Redis + PostgreSQL).
 from __future__ import annotations
 
 import os
+import sys
+
+# La raíz del repositorio debe estar en sys.path: al ejecutar
+# "streamlit run app/main.py" el path por defecto es el de app/, y los
+# módulos del pipeline se importan como "app.detector", "app.ingest", ...
+_RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _RAIZ not in sys.path:
+    sys.path.insert(0, _RAIZ)
 
 # Sin Redis ni PostgreSQL en Streamlit Cloud: bus de eventos local y
 # auditoría desactivada. Debe fijarse ANTES de importar el pipeline.
