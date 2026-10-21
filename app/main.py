@@ -29,9 +29,6 @@ if _RAIZ not in sys.path:
 os.environ.setdefault("BUS_LOCAL", "1")
 os.environ.setdefault("AUDIT_ENABLED", "0")
 
-import asyncio
-import threading
-import time
 from datetime import datetime
 
 import streamlit as st
@@ -51,8 +48,7 @@ def _secretos_a_entorno() -> None:
 
 _secretos_a_entorno()
 
-from app.detector import StreamDetector  # noqa: E402
-from app.ingest import EventProducer  # noqa: E402
+from app.motor import Motor, obtener_motor  # noqa: E402
 
 # ── Configuración de la página ──────────────────────────────────────────
 
@@ -70,72 +66,7 @@ CAUSA_LABEL = {
 
 
 # ── Motor Event-Driven dentro del proceso ───────────────────────────────
-
-class Motor:
-    """Productor + detector corriendo en un hilo aparte del hilo de Streamlit.
-
-    ``snapshot`` se reemplaza (nunca se muta) para que el hilo de la UI lo
-    pueda leer sin bloqueos ni carreras.
-    """
-
-    def __init__(self) -> None:
-        self.snapshot: list[dict] = []
-        self.ultimo_update = 0.0
-        self.error = ""
-        self.productor: EventProducer | None = None
-        self.detector: StreamDetector | None = None
-        self._hilo: threading.Thread | None = None
-        self._arrancar()
-
-    # ── Ciclo de vida ───────────────────────────────────────────────────
-    def _arrancar(self) -> None:
-        self.error = ""
-        self._hilo = threading.Thread(
-            target=self._bucle, name="motor-eventos", daemon=True
-        )
-        self._hilo.start()
-
-    def vivo(self) -> bool:
-        return self._hilo is not None and self._hilo.is_alive()
-
-    def asegurar_vivo(self) -> None:
-        """Relanza el pipeline si el hilo murió (p. ej. tras una suspensión)."""
-        if not self.vivo():
-            self._arrancar()
-
-    def _bucle(self) -> None:
-        try:
-            import asyncio
-
-            asyncio.run(self._main())
-        except Exception as exc:  # pragma: no cover
-            self.error = f"{type(exc).__name__}: {exc}"
-
-    async def _main(self) -> None:
-        productor = EventProducer()
-        detector = StreamDetector()
-        self.productor = productor
-        self.detector = detector
-
-        async def refresco() -> None:
-            while True:
-                await asyncio.sleep(2.0)
-                try:
-                    datos = detector.snapshot()
-                except RuntimeError:
-                    continue
-                self.snapshot = datos
-                self.ultimo_update = time.time()
-
-        await asyncio.gather(
-            productor.start(), detector.start(), refresco()
-        )
-
-
-@st.cache_resource
-def motor() -> Motor:
-    """Un único motor por proceso (sobrevive a los reruns de Streamlit)."""
-    return Motor()
+# La clase vive en app/motor.py (módulo estable, singleton por proceso).
 
 
 # ── Utilidades de presentación ──────────────────────────────────────────
@@ -299,7 +230,7 @@ CSS = """
 
 st.markdown(CSS, unsafe_allow_html=True)
 
-motor_ = motor()
+motor_ = obtener_motor()
 motor_.asegurar_vivo()
 if not motor_.vivo() and motor_.error:
     st.error(f"Fehler im Event-Pipeline: {motor_.error}")
@@ -326,7 +257,10 @@ def panel() -> None:
         os.environ.get("DB_CLIENT_ID") and os.environ.get("DB_API_KEY")
     )
     if motor_.error:
-        st.error(f"Fehler im Event-Pipeline: {motor_.error}")
+        st.error(
+            f"Fehler im Event-Pipeline: {motor_.error}\n\n"
+            f"```\n{(motor_.error_detalle or '')[-1200:]}\n```"
+        )
         return
     metricas = det.metrics() if det else {}
     productoras = prod.metrics() if prod else {}
