@@ -1,5 +1,7 @@
-fastapi==0.115.6
-uvicorn[standard]==0.34.0
-psycopg2-binary==2.9.10
-redis==5.2.1
+# Dependencias del dashboard de Streamlit Cloud (app/main.py).
+# El pipeline corre dentro del proceso: bus de eventos local (app/bus.py) y
+# sin PostgreSQL (auditoría desactivada con AUDIT_ENABLED=0).
+# NO se incluye psycopg2-binary: no tiene wheel para Python 3.13+ y hacía
+# fallar el despliegue de Streamlit Cloud ("pg_config executable not found").
+streamlit>=1.40
 requests==2.32.3

@@ -14,4 +14,4 @@ psql -h "${DB_HOST:-db}" -p "${DB_PORT:-5432}" -U "${DB_USER:-postgres}" \
 echo "[entrypoint] Esquema aplicado."
 
 echo "[entrypoint] Arrancando la aplicación FastAPI..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000
+exec uvicorn app.api:app --host 0.0.0.0 --port 8000

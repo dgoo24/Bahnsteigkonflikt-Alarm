@@ -31,15 +31,13 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-import redis.asyncio as aioredis
-
+from app.bus import create_bus
 from app.db import upsert_conflicto_auditoria
 from app.events import (
     CH_CANCELACION,
     CH_CONFLICTOS,
     CH_OCUPACION,
     CH_RETRASO,
-    REDIS_URL,
     loads,
     parse_event_time,
     utcnow,
@@ -118,7 +116,7 @@ class StreamDetector:
         # uid -> conflicto activo
         self.active: dict[str, dict] = {}
 
-        self._redis: aioredis.Redis | None = None
+        self._redis = None  # bus de eventos (Redis o local)
         self._sweep_task: asyncio.Task | None = None
 
         # Métricas de stream
@@ -140,7 +138,7 @@ class StreamDetector:
     # ── Ciclo de vida ───────────────────────────────────────────────────
 
     async def start(self) -> None:
-        self._redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+        self._redis = create_bus()
         self._sweep_task = asyncio.create_task(self._sweep_loop())
         logger.info(
             "StreamDetector iniciado: ventana=%ss, lateness=%ss, umbral=%ss, "

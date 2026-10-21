@@ -34,14 +34,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-import redis.asyncio as aioredis
 import requests
 
+from app.bus import create_bus
 from app.events import (
     CH_CANCELACION,
     CH_OCUPACION,
     CH_RETRASO,
-    REDIS_URL,
     cancelacion_event,
     ocupacion_event,
     retraso_event,
@@ -369,7 +368,7 @@ class EventProducer:
     """
 
     def __init__(self) -> None:
-        self._redis: aioredis.Redis | None = None
+        self._redis = None  # bus de eventos (Redis o local)
         self._api = DbApi(DB_CLIENT_ID, DB_API_KEY)
         self._limiter = RateLimiter(DB_RATE_PER_MIN)
         self._running = False
@@ -401,7 +400,7 @@ class EventProducer:
     # ── Ciclo de vida ───────────────────────────────────────────────────
 
     async def start(self) -> None:
-        self._redis = aioredis.from_url(REDIS_URL, decode_responses=True)
+        self._redis = create_bus()
         self._running = True
         if not self._api.credenciales:
             logger.error(

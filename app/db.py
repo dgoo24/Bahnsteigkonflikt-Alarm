@@ -5,10 +5,23 @@ import os
 import time
 from contextlib import contextmanager
 
-import psycopg2
-from psycopg2.extras import RealDictCursor
+try:  # PostgreSQL es opcional (Streamlit Cloud no tiene servidor de BD)
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+
+    PSYCOPG2_DISPONIBLE = True
+except Exception:  # pragma: no cover - depende del entorno
+    psycopg2 = None
+    RealDictCursor = None
+    PSYCOPG2_DISPONIBLE = False
 
 logger = logging.getLogger(__name__)
+
+# La auditoría en PostgreSQL es un sink opcional: en Streamlit Cloud se
+# desactiva (AUDIT_ENABLED=0) porque no hay servidor de base de datos.
+AUDIT_ENABLED = (
+    os.getenv("AUDIT_ENABLED", "1").strip().lower() not in ("0", "false", "no")
+)
 
 
 def get_conn_params() -> dict:
@@ -24,6 +37,8 @@ def get_conn_params() -> dict:
 
 def get_connection(retries: int = 10, delay: float = 2.0):
     """Abre una conexión a PostgreSQL con reintentos."""
+    if not PSYCOPG2_DISPONIBLE:
+        raise RuntimeError("psycopg2 no está instalado: auditoría no disponible")
     last_error = None
     for attempt in range(1, retries + 1):
         try:
@@ -60,6 +75,8 @@ def upsert_conflicto_auditoria(conflicto: dict, action: str) -> None:
     Se ejecuta fuera del camino crítico del stream (asyncio.to_thread).
     La tabla es historial/auditoría — la detección vive en memoria.
     """
+    if not (AUDIT_ENABLED and PSYCOPG2_DISPONIBLE):
+        return
     sql = """
         INSERT INTO conflictos
             (uid, estacion_id, nombre_estacion, region, ciudad, gleis,

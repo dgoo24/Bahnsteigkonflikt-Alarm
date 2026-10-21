@@ -1,0 +1,7 @@
+# Dependencias del backend FastAPI en Docker (app/api.py).
+# Aquí sí hace falta PostgreSQL (auditoría) y Redis (bus de eventos).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+psycopg2-binary==2.9.10
+redis==5.2.1
+requests==2.32.3

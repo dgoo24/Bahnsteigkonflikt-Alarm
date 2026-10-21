@@ -7,7 +7,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: db_andenes
     ports:
-      - "5432:5432"
+      # 5434 en el host (5432 está ocupado por otro proyecto local);
+      # dentro de la red de Compose sigue siendo 5432.
+      - "5434:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +23,9 @@ services:
     container_name: redis_bus
     command: ["redis-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     ports:
-      - "6379:6379"
+      # 6380 en el host (6379 está ocupado por otro proyecto local);
+      # dentro de la red de Compose sigue siendo 6379.
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
