@@ -29,6 +29,7 @@ if _RAIZ not in sys.path:
 os.environ.setdefault("BUS_LOCAL", "1")
 os.environ.setdefault("AUDIT_ENABLED", "0")
 
+import asyncio
 import threading
 import time
 from datetime import datetime
@@ -88,6 +89,7 @@ class Motor:
 
     # ── Ciclo de vida ───────────────────────────────────────────────────
     def _arrancar(self) -> None:
+        self.error = ""
         self._hilo = threading.Thread(
             target=self._bucle, name="motor-eventos", daemon=True
         )
@@ -98,7 +100,7 @@ class Motor:
 
     def asegurar_vivo(self) -> None:
         """Relanza el pipeline si el hilo murió (p. ej. tras una suspensión)."""
-        if not self.vivo() and not self.error:
+        if not self.vivo():
             self._arrancar()
 
     def _bucle(self) -> None:
@@ -317,11 +319,15 @@ def _estado_badge(creds: bool) -> tuple[str, str]:
 @st.fragment(run_every="5s")
 def panel() -> None:
     """Cabecera + filtros + KPIs + tarjetas; se refresca cada 5 s."""
+    motor_.asegurar_vivo()
     prod = motor_.productor
     det = motor_.detector
     creds = bool(
         os.environ.get("DB_CLIENT_ID") and os.environ.get("DB_API_KEY")
     )
+    if motor_.error:
+        st.error(f"Fehler im Event-Pipeline: {motor_.error}")
+        return
     metricas = det.metrics() if det else {}
     productoras = prod.metrics() if prod else {}
 
