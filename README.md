@@ -1,4 +1,4 @@
-# Bahnsteigkonflikt-Alarm
+# 🚆 Bahnsteigkonflikt-Alarm
 
 MVP **Event-Driven** de detección de conflictos de andén (Gleis) con **datos
 reales de la Deutsche Bahn**. Cada alerta indica la estación, el andén, el
@@ -18,7 +18,7 @@ DB StaDa API (catálogo ALE)       ─┘                    (Redis / local)   (
 - **Auditoría**: PostgreSQL guarda el historial de alertas (fuera del camino
   crítico). Opcional: se desactiva con `AUDIT_ENABLED=0`.
 
-## Despliegue A — Streamlit Cloud (dashboard)
+## 🧩Despliegue A — Streamlit Cloud (dashboard)
 
 El pipeline completo corre **dentro del proceso** de Streamlit, con un bus de
 eventos local (`app/bus.py`) que expone la misma API que Redis.
@@ -40,7 +40,7 @@ eventos local (`app/bus.py`) que expone la misma API que Redis.
 > queda fuera porque no tiene wheel para Python 3.13+ y hacía fallar el
 > despliegue con `pg_config executable not found`.
 
-## Despliegue B — Docker (API FastAPI + SSE)
+## 📁 Despliegue B — Docker (API FastAPI + SSE)
 
 ```bash
 cp .env.example .env      # credenciales DB API
@@ -63,7 +63,7 @@ docker compose up -d --build
 | `GET /api/metrics` | Métricas del productor y del detector |
 | `GET /api/health` | Estado de DB / Redis / credenciales |
 
-## Estructura
+## ⚡Estructura
 
 ```
 app/
@@ -78,7 +78,7 @@ app/
 sql/schema.sql   Esquema + migraciones idempotentes
 ```
 
-## Variables de entorno
+## 📊 Variables de entorno
 
 | Variable | Default | Descripción |
 |---|---|---|
@@ -91,7 +91,7 @@ sql/schema.sql   Esquema + migraciones idempotentes
 | `UMBRAL_SEGUNDOS` | `180` | Umbral de *Risiko* (3 min) |
 | `HORIZONTE_SEG` | `1800` | Horizonte de predicción (30 min) |
 
-## Datos
+## 📡 Datos
 
 Deutsche Bahn – DB API Marketplace: *Timetables API* y *Station Data API*,
 licencia **CC BY 4.0**. Sin datos simulados: si no hay credenciales, el panel
