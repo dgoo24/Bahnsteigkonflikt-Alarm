@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" role="img" aria-label="Bahnsteigkonflikt-Alarm — Gleiskonflikte in Echtzeit erkennen">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#070d18"/>
+      <stop offset="0.55" stop-color="#0b1220"/>
+      <stop offset="1" stop-color="#131c2e"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ec0016"/>
+      <stop offset="1" stop-color="#ff5a5f"/>
+    </linearGradient>
+    <linearGradient id="train" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f8fafc"/>
+      <stop offset="0.65" stop-color="#cbd5e1"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a5f3fc"/>
+      <stop offset="0.5" stop-color="#22d3ee"/>
+      <stop offset="1" stop-color="#0e7490"/>
+    </linearGradient>
+    <linearGradient id="platform" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#334155"/>
+      <stop offset="1" stop-color="#1e293b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ef4444" stop-opacity="0.42"/>
+      <stop offset="0.6" stop-color="#ef4444" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#ef4444" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="lamp" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#fef08a"/>
+      <stop offset="0.45" stop-color="#facc15"/>
+      <stop offset="1" stop-color="#facc15" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#1e293b" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <!-- Hintergrund -->
+  <rect width="1200" height="420" fill="url(#bg)"/>
+  <rect width="1200" height="420" fill="url(#grid)" opacity="0.6"/>
+  <circle cx="975" cy="210" r="245" fill="url(#glow)"/>
+
+  <!-- Gleise im Hintergrund -->
+  <path d="M-40 390 C 180 330, 330 372, 520 348 S 860 300, 1240 336"
+        fill="none" stroke="#1e293b" stroke-width="2" stroke-dasharray="10 12"/>
+  <path d="M-40 404 C 180 344, 330 386, 520 362 S 860 314, 1240 350"
+        fill="none" stroke="#1e293b" stroke-width="2" stroke-dasharray="10 12"/>
+
+  <!-- Akzentleiste -->
+  <rect x="0" y="0" width="8" height="420" fill="url(#red)"/>
+
+  <!-- Kopfzeile -->
+  <rect x="72" y="58" width="34" height="34" rx="8" fill="#ec0016"/>
+  <text x="89" y="81" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="15" font-weight="800" fill="#ffffff">DB</text>
+  <text x="120" y="81" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="12.5" font-weight="700" fill="#fca5a5" letter-spacing="3.2">DB API · ECHTZEITDATEN · DEUTSCHLAND</text>
+
+  <!-- Titel -->
+  <text x="72" y="145" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="21" font-weight="800" fill="#f87171" letter-spacing="7.5">BAHNSTEIGKONFLIKT</text>
+  <text x="68" y="240" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="94" font-weight="800" fill="#f8fafc" letter-spacing="-2">Alarm<tspan fill="#ec0016">.</tspan></text>
+
+  <!-- Untertitel -->
+  <text x="74" y="286" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="19" fill="#cbd5e1">Zwei Züge. Ein Gleis. Null Minuten Puffer.</text>
+  <text x="74" y="330" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+        font-size="12.5" fill="#94a3b8" letter-spacing="0.8">15-Minuten-Fenster · 30-Minuten-Horizont · Gleiswechsel-Empfehlung</text>
+
+  <!-- Bodenlinie -->
+  <rect x="72" y="352" width="640" height="2" fill="#1e293b"/>
+
+  <!-- Bahnsteigschild -->
+  <g>
+    <line x1="820" y1="0" x2="820" y2="38" stroke="#475569" stroke-width="3"/>
+    <line x1="950" y1="0" x2="950" y2="38" stroke="#475569" stroke-width="3"/>
+    <rect x="780" y="38" width="210" height="50" rx="9" fill="#0f172a" stroke="#475569" stroke-width="2"/>
+    <text x="885" y="62" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="11" font-weight="700" fill="#94a3b8" letter-spacing="3">BAHNSTEIG</text>
+    <text x="885" y="80" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="17" font-weight="800" fill="#f8fafc" letter-spacing="1">Gleis 7</text>
+  </g>
+
+  <!-- Signal -->
+  <g>
+    <rect x="1134" y="150" width="10" height="205" rx="4" fill="#334155"/>
+    <rect x="1112" y="104" width="54" height="112" rx="14" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+    <circle cx="1139" cy="132" r="17" fill="#ef4444" opacity="0.28"/>
+    <circle cx="1139" cy="132" r="11" fill="#ef4444"/>
+    <circle cx="1139" cy="161" r="9" fill="#334155"/>
+    <circle cx="1139" cy="188" r="9" fill="#334155"/>
+    <rect x="1118" y="216" width="42" height="5" rx="2" fill="#1e293b"/>
+  </g>
+
+  <!-- Live-Warnung -->
+  <g>
+    <rect x="548" y="150" width="212" height="114" rx="14" fill="#0b1220" stroke="#7f1d1d" stroke-width="1.5"/>
+    <circle cx="568" cy="173" r="5" fill="#ef4444"/>
+    <text x="582" y="177" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="10.5" font-weight="800" fill="#fca5a5" letter-spacing="1.8">KONFLIKT ERKANNT</text>
+    <text x="568" y="204" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="15" font-weight="800" fill="#f8fafc">ICE 599 × RE 4077</text>
+    <text x="568" y="225" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="10.5" fill="#94a3b8">Gleis 7 · 2,4 Min. Überlappung</text>
+    <rect x="568" y="236" width="172" height="1" fill="#1e293b"/>
+    <text x="568" y="253" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="11" font-weight="700" fill="#fbbf24">↻ Gleiswechsel → Gleis 9</text>
+  </g>
+
+  <!-- Zug (Frontansicht) -->
+  <g>
+    <!-- Gleis -->
+    <rect x="915" y="340" width="12" height="80" fill="#475569"/>
+    <rect x="1041" y="340" width="12" height="80" fill="#475569"/>
+    <rect x="880" y="338" width="210" height="12" rx="5" fill="#1e293b"/>
+
+    <!-- Wagenkasten -->
+    <rect x="856" y="104" width="258" height="242" rx="40" fill="url(#train)" stroke="#e2e8f0" stroke-width="3"/>
+    <rect x="880" y="88" width="210" height="28" rx="14" fill="#64748b"/>
+    <rect x="916" y="80" width="138" height="14" rx="7" fill="#475569"/>
+
+    <!-- Frontscheibe -->
+    <path d="M890 148 Q890 130 908 130 H1062 Q1080 130 1080 148 V208 Q1080 226 1062 226 H908 Q890 226 890 208 Z"
+          fill="url(#glass)" stroke="#0f172a" stroke-width="4"/>
+    <path d="M906 142 H958 L924 214 H906 Z" fill="#ffffff" opacity="0.18"/>
+    <path d="M1060 142 H1030 L1052 214 H1060 Z" fill="#ffffff" opacity="0.10"/>
+
+    <!-- Roter Streifen -->
+    <rect x="856" y="244" width="258" height="26" fill="url(#red)"/>
+
+    <!-- DB-Logo -->
+    <rect x="962" y="282" width="46" height="34" rx="6" fill="#ec0016"/>
+    <text x="985" y="307" text-anchor="middle" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif"
+          font-size="20" font-weight="800" fill="#ffffff">DB</text>
+
+    <!-- Scheinwerfer -->
+    <circle cx="902" cy="299" r="28" fill="url(#lamp)" opacity="0.85"/>
+    <circle cx="902" cy="299" r="11" fill="#fef9c3"/>
+    <circle cx="1068" cy="299" r="28" fill="url(#lamp)" opacity="0.85"/>
+    <circle cx="1068" cy="299" r="11" fill="#fef9c3"/>
+
+    <!-- Stoßstange -->
+    <rect x="872" y="324" width="226" height="20" rx="10" fill="#1e293b"/>
+  </g>
+
+  <!-- Bahnsteig -->
+  <rect x="760" y="356" width="440" height="10" rx="5" fill="url(#platform)"/>
+  <path d="M760 372 H1200" stroke="#f59e0b" stroke-width="4" stroke-dasharray="16 11" opacity="0.75"/>
+
+  <!-- Untere Leiste -->
+  <rect x="0" y="416" width="1200" height="4" fill="url(#red)"/>
+</svg>
