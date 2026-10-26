@@ -15,54 +15,54 @@
   <h3>Wenn zwei Züge dasselbe Gleis wollen.</h3>
 
   <p>
-    <b>Detección de conflictos de andén en tiempo real</b> con datos en vivo de la Deutsche Bahn.<br>
+    <b>Echtzeit-Erkennung von Bahnsteigkonflikten</b> mit Live-Daten der Deutschen Bahn.<br>
     <sub>Event-Driven · 15-Minuten-Fenster · 30-Minuten-Horizont · Gleiswechsel-Empfehlung</sub>
   </p>
 
   <p>
-    <a href="#el-problema">El problema</a> ·
-    <a href="#arquitectura">Arquitectura</a> ·
-    <a href="#despliegue">Despliegue</a> ·
+    <a href="#das-problem">Das Problem</a> ·
+    <a href="#architektur">Architektur</a> ·
+    <a href="#deployment">Deployment</a> ·
     <a href="#api">API</a> ·
-    <a href="#kurzfassung-auf-deutsch">Deutsch</a>
+    <a href="#kurzfassung">Kurzfassung</a>
   </p>
 </div>
 
 ---
 
-<a name="el-problema"></a>
-## 🚆 El problema
+<a name="das-problem"></a>
+## 🚆 Das Problem
 
-> **En una red saturada, ocho minutos de retraso bastan para que dos trenes reclamen el mismo andén.**
+> **In einem ausgelasteten Netz reichen acht Minuten Verspätung, damit zwei Züge denselben Bahnsteig beanspruchen.**
 >
-> El plan estático no lo ve. El viajero tampoco. Cuando el conflicto aparece en el tablero, ya hay gente corriendo por el andén.
+> Der statische Fahrplan sieht das nicht. Der Reisende auch nicht. Wenn der Konflikt auf der Anzeigetafel auftaucht, rennen schon Menschen über den Bahnsteig.
 
-**Bahnsteigkonflikt-Alarm** vigila la ocupación de cada Gleis en tiempo real y avisa **antes** de que el choque de horarios ocurra. Para cada alerta muestra la estación, el andén, los **números de tren** implicados y la causa:
+**Bahnsteigkonflikt-Alarm** überwacht die Belegung jedes Gleises in Echtzeit und warnt **bevor** der Fahrplankonflikt eintritt. Jede Warnung zeigt Bahnhof, Gleis, die betroffenen **Zugnummern** und die Ursache:
 
-- 🔴 **Konflikt** — dos ocupaciones se solapan de verdad.
-- 🟠 **Risiko** — margen inferior a 3 minutos, aún sin solape.
-- 🔁 **Gleiswechsel** — el conflicto persiste: se propone un andén alternativo libre.
+- 🔴 **Konflikt** — zwei Belegungen überlappen sich tatsächlich.
+- 🟠 **Risiko** — Puffer unter 3 Minuten, noch ohne Überlappung.
+- 🔁 **Gleiswechsel** — der Konflikt bleibt bestehen: ein freies Ausweichgleis wird vorgeschlagen.
 
-No hay datos simulados. Si no hay credenciales de la DB API, el panel lo dice y no inventa alertas.
+Keine simulierten Daten. Ohne Zugangsdaten der DB API sagt das Panel das und erfindet keine Warnungen.
 
 <table>
 <tr>
 <td width="33%" valign="top">
 
-### 📡 En vivo
-Plan y cambios (`fchg`) de la DB Timetables API, más el catálogo StaDa de ≈6.000 estaciones alemanas.
+### 📡 Live
+Fahrplan und Änderungen (`fchg`) der DB Timetables API, dazu der StaDa-Katalog mit ≈6.000 deutschen Bahnhöfen.
 
 </td>
 <td width="33%" valign="top">
 
-### 🧠 Con memoria
-Ventanas deslizantes por `(estación, Gleis)` indexadas por **event time**, no por hora de llegada del mensaje.
+### 🧠 Mit Gedächtnis
+Gleitende Fenster pro `(Bahnhof, Gleis)`, indiziert nach **Event-Time** — nicht nach Eingangszeit der Nachricht.
 
 </td>
 <td width="33%" valign="top">
 
-### ⚡ Sin polling
-Bus de eventos y SSE: las alertas se empujan al panel en cuanto el detector las produce.
+### ⚡ Kein Polling
+Event-Bus und SSE: Warnungen werden ins Panel geschoben, sobald der Detektor sie erzeugt.
 
 </td>
 </tr>
@@ -70,8 +70,8 @@ Bus de eventos y SSE: las alertas se empujan al panel en cuanto el detector las 
 
 ---
 
-<a name="arquitectura"></a>
-## 🛤️ Arquitectura
+<a name="architektur"></a>
+## 🛤️ Architektur
 
 ```mermaid
 flowchart LR
@@ -82,10 +82,10 @@ flowchart LR
     end
 
     P["EventProducer<br/><b>55 req/min</b>"]
-    B[("Event Bus<br/>Redis Pub/Sub<br/><i>o bus local</i>")]
+    B[("Event-Bus<br/>Redis Pub/Sub<br/><i>oder lokaler Bus</i>")]
     D["StreamDetector<br/><b>15-Minuten-Fenster</b>"]
     U["Dashboard<br/>Streamlit · SSE"]
-    A[("PostgreSQL<br/><i>Auditoría</i>")]
+    A[("PostgreSQL<br/><i>Audit</i>")]
 
     T --> P
     S --> P
@@ -93,127 +93,127 @@ flowchart LR
     B --> D
     D -->|"nuevo · actualizado · resuelto"| B
     B --> U
-    D -.->|"asíncrono"| A
+    D -.->|"asynchron"| A
 ```
 
-El **productor** rota peticiones sobre el catálogo con un token bucket global (55 req/min, el plan Free permite 60). El **detector** mantiene la ventana en memoria y publica las alertas. PostgreSQL solo guarda auditoría: nunca está en el camino crítico.
+Der **Producer** rotiert die Anfragen über den Katalog mit einem globalen Token-Bucket (55 req/min, der Free-Plan erlaubt 60). Der **Detektor** hält das Fenster im Speicher und veröffentlicht die Warnungen. PostgreSQL speichert nur das Audit — es liegt nie im kritischen Pfad.
 
 ---
 
-## 🧠 Cómo se detecta un conflicto
+## 🧠 Wie ein Konflikt erkannt wird
 
-Cada tren ocupa su andén desde que llega hasta que sale. El retraso desplaza esa ocupación:
+Jeder Zug belegt sein Gleis von der Ankunft bis zur Abfahrt. Eine Verspätung verschiebt diese Belegung:
 
 ```text
-llegada_eff = hora_llegada + retraso_min
-salida_eff  = hora_salida  + retraso_min
+ankunft_eff = ankunftszeit + verspaetung_min
+abfahrt_eff = abfahrtszeit + verspaetung_min
 
-solape = max(0, min(salida_a, salida_b) - max(llegada_a, llegada_b))
+ueberlappung = max(0, min(abfahrt_a, abfahrt_b) - max(ankunft_a, ankunft_b))
 ```
 
-| Nivel | Condición | Lectura |
+| Stufe | Bedingung | Lesart |
 |---|---|---|
-| 🔴 **Konflikt** | `solape > 0` y ambas ocupaciones confirmadas | Dos trenes en el mismo Gleis a la vez |
-| 🟠 **Risiko** | `0 ≤ margen < 180 s` | Intervalo entre trenes demasiado corto, sin solape todavía |
-| ⚪ Sin alerta | `margen ≥ 180 s` o fuera del horizonte | Nada accionable en los próximos 30 min |
+| 🔴 **Konflikt** | `ueberlappung > 0` und beide Belegungen bestätigt | Zwei Züge gleichzeitig auf demselben Gleis |
+| 🟠 **Risiko** | `0 ≤ puffer < 180 s` | Abstand zwischen den Zügen zu kurz, noch ohne Überlappung |
+| ⚪ Keine Warnung | `puffer ≥ 180 s` oder außerhalb des Horizonts | In den nächsten 30 Min. nichts Handlungsrelevantes |
 
-La **causa** también se calcula, no se adivina:
+Auch die **Ursache** wird berechnet, nicht geraten:
 
-| Causa | Regla |
+| Ursache | Regel |
 |---|---|
-| `efecto_dominó` | Sin el retraso no había conflicto; con él, sí |
-| `retraso_contribuyente` | Ya había conflicto y el retraso lo agrava |
-| `solapamiento_programado` | El choque ya estaba en el plan |
+| `efecto_dominó` | Ohne die Verspätung gäbe es keinen Konflikt; mit ihr schon |
+| `retraso_contribuyente` | Der Konflikt bestand bereits, die Verspätung verschärft ihn |
+| `solapamiento_programado` | Der Konflikt stand schon im Fahrplan |
 
-Si un conflicto sigue vivo tras **45 s**, el detector busca un Gleis libre en la misma estación y añade `sugerencia_gleiswechsel` + `gleis_alternativo`. Las cancelaciones liberan la ocupación al instante y resuelven sus alertas.
+Bleibt ein Konflikt länger als **45 s** bestehen, sucht der Detektor ein freies Gleis im selben Bahnhof und ergänzt `sugerencia_gleiswechsel` + `gleis_alternativo`. Ausfälle geben die Belegung sofort frei und lösen ihre Warnungen auf.
 
 ---
 
-## ✨ Lo que lo hace diferente
+## ✨ Was dieses Projekt anders macht
 
 | | |
 |---|---|
-| **Tiempo de evento** | Ventana de 15 min por `(estación, Gleis)` con tolerancia de 120 s para eventos tardíos o desordenados. |
-| **Dos niveles** | Separa el conflicto real del simple riesgo de cabeza de andén. |
-| **Efecto dominó** | Atribuye el conflicto al retraso que lo provocó, no solo al solape. |
-| **Propuesta accionable** | No se queda en “hay un problema”: sugiere un Gleis alternativo. |
-| **Toda Alemania** | Catálogo StaDa completo con rotación inteligente bajo el rate limit del plan Free. |
-| **Doble despliegue** | Streamlit Cloud sin infraestructura, o Docker con Redis + PostgreSQL + SSE. |
-| **Auditoría desacoplada** | El historial va a PostgreSQL sin bloquear el stream. |
+| **Event-Time** | 15-Min.-Fenster pro `(Bahnhof, Gleis)` mit 120 s Toleranz für verspätete oder ungeordnete Events. |
+| **Zwei Stufen** | Trennt den echten Konflikt vom bloßen Bahnsteig-Risiko. |
+| **Dominoeffekt** | Ordnet den Konflikt der Verspätung zu, die ihn verursacht hat — nicht nur der Überlappung. |
+| **Handlungsfähiger Vorschlag** | Bleibt nicht bei „es gibt ein Problem“: schlägt ein Ausweichgleis vor. |
+| **Ganz Deutschland** | Vollständiger StaDa-Katalog mit intelligenter Rotation unter dem Rate-Limit des Free-Plans. |
+| **Zwei Deployments** | Streamlit Cloud ohne Infrastruktur oder Docker mit Redis + PostgreSQL + SSE. |
+| **Entkoppeltes Audit** | Die Historie geht nach PostgreSQL, ohne den Stream zu blockieren. |
 
-### Frente al polling clásico
+### Gegenüber klassischem Polling
 
-| | Polling cada 30 s | Este proyecto |
+| | Polling alle 30 s | Dieses Projekt |
 |---|---|---|
-| Latencia | Hasta 30 s | Push inmediato |
-| Eventos tardíos | Se pierden o duplican | Ventana por event time |
-| Carga | Consultas constantes | Presupuesto de API controlado |
-| Alertas | Estado “foto” | `nuevo` / `actualizado` / `resuelto` |
+| Latenz | Bis zu 30 s | Sofortiger Push |
+| Verspätete Events | Gehen verloren oder werden doppelt verarbeitet | Fenster nach Event-Time |
+| Last | Ständige Abfragen | Kontrolliertes API-Budget |
+| Warnungen | „Momentaufnahme“-Status | `nuevo` / `actualizado` / `resuelto` |
 
 ---
 
-<a name="despliegue"></a>
-## 🚀 Despliegue
+<a name="deployment"></a>
+## 🚀 Deployment
 
-### A — Streamlit Cloud (sin Redis, sin PostgreSQL)
+### A — Streamlit Cloud (ohne Redis, ohne PostgreSQL)
 
-Todo el pipeline corre dentro del proceso de Streamlit con un bus local.
+Die gesamte Pipeline läuft im Streamlit-Prozess mit einem lokalen Bus.
 
-1. Haz fork o clona el repositorio.
-2. En [Streamlit Community Cloud](https://share.streamlit.io), crea una app con:
+1. Repository forken oder klonen.
+2. In [Streamlit Community Cloud](https://share.streamlit.io) eine App anlegen mit:
    - **Main file path:** `app/main.py`
    - **Branch:** `main`
-3. En **Settings → Secrets**, añade:
+3. Unter **Settings → Secrets** ergänzen:
 
    ```toml
-   DB_CLIENT_ID = "tu-client-id"
-   DB_API_KEY   = "tu-api-key"
+   DB_CLIENT_ID = "deine-client-id"
+   DB_API_KEY   = "dein-api-key"
    ```
 
-4. Despliega. Las credenciales se obtienen en [developers.deutschebahn.com](https://developers.deutschebahn.com) con suscripción a **Timetables API** y **Station Data API**.
+4. Deployen. Die Zugangsdaten gibt es bei [developers.deutschebahn.com](https://developers.deutschebahn.com) mit Abo der **Timetables API** und der **Station Data API**.
 
 > [!TIP]
-> `requirements.txt` solo instala `streamlit` y `requests`. `psycopg2` queda fuera a propósito: no tiene wheel para Python 3.13+ y rompía el despliegue de Streamlit Cloud.
+> `requirements.txt` installiert nur `streamlit` und `requests`. `psycopg2` bleibt bewusst draußen: Es hat kein Wheel für Python 3.13+ und hat das Streamlit-Cloud-Deployment zum Absturz gebracht.
 
 ### B — Docker (FastAPI + SSE + Redis + PostgreSQL)
 
 ```bash
 cp .env.example .env        # PowerShell: Copy-Item .env.example .env
-# edita .env con DB_CLIENT_ID y DB_API_KEY
+# .env mit DB_CLIENT_ID und DB_API_KEY ausfüllen
 
 docker compose up -d --build
 ```
 
-| Servicio | URL / puerto |
+| Dienst | URL / Port |
 |---|---|
 | Dashboard + API | <http://localhost:8000> |
 | PostgreSQL | `localhost:5434` |
 | Redis | `localhost:6380` |
 
 ```bash
-docker compose logs -f app   # ver el stream en directo
-docker compose down          # parar todo
+docker compose logs -f app   # Stream live verfolgen
+docker compose down          # alles stoppen
 ```
 
 > [!IMPORTANT]
-> Sin `DB_CLIENT_ID` y `DB_API_KEY` no hay datos. El proyecto no incluye un modo de simulación: el panel avisa de que faltan credenciales.
+> Ohne `DB_CLIENT_ID` und `DB_API_KEY` gibt es keine Daten. Das Projekt hat keinen Simulationsmodus: Das Panel weist auf die fehlenden Zugangsdaten hin.
 
 ---
 
 <a name="api"></a>
 ## 🔌 API
 
-| Método | Ruta | Descripción |
+| Methode | Route | Beschreibung |
 |---|---|---|
-| `GET` | `/` | Panel HTML con SSE |
-| `GET` | `/api/stream/conflictos` | Stream SSE: `snapshot`, `nuevo`, `actualizado`, `resuelto` |
-| `GET` | `/api/conflictos` | Historial desde PostgreSQL (`?minutes=15&estado=activo`) |
-| `GET` | `/api/estado` | Estado en vivo del detector (memoria) |
-| `GET` | `/api/estaciones` | Catálogo StaDa: regiones y ciudades |
-| `GET` | `/api/metrics` | Métricas del productor y del detector |
-| `GET` | `/api/health` | Salud de DB, Redis y credenciales (`503` si degradado) |
+| `GET` | `/` | HTML-Panel mit SSE |
+| `GET` | `/api/stream/conflictos` | SSE-Stream: `snapshot`, `nuevo`, `actualizado`, `resuelto` |
+| `GET` | `/api/conflictos` | Historie aus PostgreSQL (`?minutes=15&estado=activo`) |
+| `GET` | `/api/estado` | Live-Status des Detektors (Speicher) |
+| `GET` | `/api/estaciones` | StaDa-Katalog: Regionen und Städte |
+| `GET` | `/api/metrics` | Metriken von Producer und Detektor |
+| `GET` | `/api/health` | Status von DB, Redis und Zugangsdaten (`503` bei Beeinträchtigung) |
 
-Ejemplo de alerta:
+Beispiel einer Warnung:
 
 ```json
 {
@@ -235,22 +235,22 @@ Ejemplo de alerta:
 
 ---
 
-## 🗂️ Estructura del proyecto
+## 🗂️ Projektstruktur
 
 ```text
 .
 ├── app/
-│   ├── main.py        # Dashboard Streamlit Cloud
+│   ├── main.py        # Streamlit-Cloud-Dashboard
 │   ├── api.py         # FastAPI + SSE (Docker)
-│   ├── motor.py       # Singleton productor + detector en un hilo
-│   ├── ingest.py      # Productor DB API, rate limit y rotación
-│   ├── detector.py    # Stream processor: ventanas, niveles, Gleiswechsel
-│   ├── events.py      # Contrato de eventos
-│   ├── bus.py         # Redis Pub/Sub o bus local en memoria
-│   ├── db.py          # Auditoría PostgreSQL (opcional)
-│   └── static/        # Panel HTML con SSE
-├── sql/schema.sql     # Esquema + migraciones idempotentes
-├── assets/banner.svg  # Este banner
+│   ├── motor.py       # Singleton: Producer + Detektor in einem Thread
+│   ├── ingest.py      # DB-API-Producer, Rate-Limit und Rotation
+│   ├── detector.py    # Stream-Processor: Fenster, Stufen, Gleiswechsel
+│   ├── events.py      # Event-Vertrag
+│   ├── bus.py         # Redis Pub/Sub oder lokaler In-Memory-Bus
+│   ├── db.py          # PostgreSQL-Audit (optional)
+│   └── static/        # HTML-Panel mit SSE
+├── sql/schema.sql     # Schema + idempotente Migrationen
+├── assets/banner.svg  # Dieses Banner
 ├── docker-compose.yml
 ├── Dockerfile
 └── requirements*.txt
@@ -258,58 +258,58 @@ Ejemplo de alerta:
 
 ---
 
-## ⚙️ Configuración
+## ⚙️ Konfiguration
 
-| Variable | Default | Descripción |
+| Variable | Default | Beschreibung |
 |---|---|---|
-| `DB_CLIENT_ID` / `DB_API_KEY` | — | Credenciales del DB API Marketplace |
-| `DB_RATE_PER_MIN` | `55` | Peticiones/min (límite del plan Free: 60) |
-| `REDIS_URL` | `redis://redis:6379/0` | Bus de eventos |
-| `BUS_LOCAL` | `0` | `1` = bus en memoria (Streamlit Cloud) |
-| `AUDIT_ENABLED` | `1` | `0` = sin PostgreSQL |
-| `VENTANA_SEG` | `900` | Ventana deslizante (15 min) |
-| `LATE_TOLERANCE_SEG` | `120` | Tolerancia para eventos tardíos |
-| `UMBRAL_SEGUNDOS` | `180` | Umbral de *Risiko* (3 min) |
-| `HORIZONTE_SEG` | `1800` | Horizonte de predicción (30 min) |
-| `GLEISWECHEL_UMBRAL_SEG` | `45` | Persistencia antes de sugerir cambio de Gleis |
-| `STADA_MAX_ESTACIONES` | `0` | `0` = todas; útil para pruebas locales |
+| `DB_CLIENT_ID` / `DB_API_KEY` | — | Zugangsdaten des DB API Marketplace |
+| `DB_RATE_PER_MIN` | `55` | Anfragen/Min. (Limit des Free-Plans: 60) |
+| `REDIS_URL` | `redis://redis:6379/0` | Event-Bus |
+| `BUS_LOCAL` | `0` | `1` = In-Memory-Bus (Streamlit Cloud) |
+| `AUDIT_ENABLED` | `1` | `0` = ohne PostgreSQL |
+| `VENTANA_SEG` | `900` | Gleitendes Fenster (15 Min.) |
+| `LATE_TOLERANCE_SEG` | `120` | Toleranz für verspätete Events |
+| `UMBRAL_SEGUNDOS` | `180` | Schwelle für *Risiko* (3 Min.) |
+| `HORIZONTE_SEG` | `1800` | Prognosehorizont (30 Min.) |
+| `GLEISWECHEL_UMBRAL_SEG` | `45` | Dauer, bevor ein Gleiswechsel vorgeschlagen wird |
+| `STADA_MAX_ESTACIONES` | `0` | `0` = alle; nützlich für lokale Tests |
 
 ---
 
-## 📊 Datos y licencia
+## 📊 Daten und Lizenz
 
-- **Fuente:** [Deutsche Bahn – DB API Marketplace](https://developers.deutschebahn.com) — *Timetables API v1* + *Station Data API v2*.
-- **Licencia de los datos:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- **Código:** MVP con fines educativos y de demostración.
+- **Quelle:** [Deutsche Bahn – DB API Marketplace](https://developers.deutschebahn.com) — *Timetables API v1* + *Station Data API v2*.
+- **Datenlizenz:** [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- **Code:** MVP zu Bildungs- und Demonstrationszwecken.
 
-**Aviso legal:** proyecto independiente. No está afiliado, patrocinado ni respaldado por Deutsche Bahn AG. Las alertas son estimaciones calculadas a partir de datos públicos y no sustituyen las indicaciones oficiales ni las decisiones de circulación.
+**Haftungsausschluss:** Unabhängiges Projekt. Nicht mit der Deutschen Bahn AG verbunden, von ihr gesponsert oder unterstützt. Die Warnungen sind Schätzungen aus öffentlichen Daten und ersetzen weder offizielle Hinweise noch betriebliche Entscheidungen.
 
-### Limitaciones honestas
+### Ehrliche Grenzen
 
-- El plan Free permite 60 req/min: no se puede consultar cada estación cada segundo. La rotación prioriza estaciones con actividad y categorías altas.
-- La API pública no expone toda la operación interna (apartaderos, maniobras, reservas de andén).
-- El sistema **aconseja** un cambio de Gleis; no reasigna andenes ni interviene en la circulación.
-- Sin credenciales válidas, el panel queda vacío: es una decisión de diseño, no un fallo.
+- Der Free-Plan erlaubt 60 req/min: Nicht jeder Bahnhof lässt sich jede Sekunde abfragen. Die Rotation priorisiert Bahnhöfe mit Aktivität und hohen Kategorien.
+- Die öffentliche API bildet nicht das gesamte Betriebsgeschehen ab (Abstellgleise, Rangierfahrten, Bahnsteigreservierungen).
+- Das System **empfiehlt** einen Gleiswechsel; es vergibt keine Gleise und greift nicht in den Betrieb ein.
+- Ohne gültige Zugangsdaten bleibt das Panel leer: Das ist eine Designentscheidung, kein Fehler.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] Ingesta en vivo `plan` + `fchg` con rate limit
-- [x] Ventanas por *event time* con eventos tardíos
-- [x] Detección de efecto dominó y cancelaciones
-- [x] SSE + auditoría PostgreSQL
-- [x] Despliegue dual: Streamlit Cloud y Docker
-- [ ] Tests unitarios del detector con `pytest`
-- [ ] Notificaciones push (Telegram / Matrix)
-- [ ] Predicción de retrasos con ML
-- [ ] Mapa de calor histórico por estación y Gleis
-- [ ] Otros operadores (ÖBB, SBB)
+- [x] Live-Ingestion `plan` + `fchg` mit Rate-Limit
+- [x] Fenster nach *Event-Time* inkl. verspäteter Events
+- [x] Erkennung von Dominoeffekt und Ausfällen
+- [x] SSE + PostgreSQL-Audit
+- [x] Duales Deployment: Streamlit Cloud und Docker
+- [ ] Unit-Tests des Detektors mit `pytest`
+- [ ] Push-Benachrichtigungen (Telegram / Matrix)
+- [ ] Verspätungsprognose mit ML
+- [ ] Historische Heatmap pro Bahnhof und Gleis
+- [ ] Weitere Betreiber (ÖBB, SBB)
 
 ---
 
-<a name="kurzfassung-auf-deutsch"></a>
-## 🇩🇪 Kurzfassung auf Deutsch
+<a name="kurzfassung"></a>
+## 🇩🇪 Kurzfassung
 
 <details>
 <summary><b>Bahnsteigkonflikt-Alarm — kurz erklärt</b></summary>
